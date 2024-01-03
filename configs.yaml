@@ -2,6 +2,7 @@ defaults:
 
   wandb_project: Test project
   wandb_run_name: run-0
+  wandb_group: null
   logdir: null
   traindir: null
   evaldir: null

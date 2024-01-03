@@ -256,7 +256,7 @@ def main(config):
     config.evaldir.mkdir(parents=True, exist_ok=True)
     step = count_steps(config.traindir)
     # step in logger is environmental step
-    logger = tools.Logger(logdir, config.action_repeat * step, config.wandb_project, config.wandb_run_name)
+    logger = tools.Logger(logdir, config.action_repeat * step, config.wandb_project, config.wandb_group, config.wandb_run_name)
 
     print("Create envs.")
     if config.offline_traindir:

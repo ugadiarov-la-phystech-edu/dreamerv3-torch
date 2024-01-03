@@ -56,8 +56,8 @@ class TimeRecording:
 
 
 class Logger:
-    def __init__(self, logdir, step, wandb_project, wandb_run_name):
-        wandb.init(project=wandb_project, name=wandb_run_name, sync_tensorboard=True)
+    def __init__(self, logdir, step, wandb_project, wandb_group, wandb_run_name):
+        wandb.init(project=wandb_project, group=wandb_group, name=wandb_run_name, sync_tensorboard=True)
 
         self._logdir = logdir
         self._writer = SummaryWriter(log_dir=str(logdir), max_queue=1000)
