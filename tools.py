@@ -11,6 +11,7 @@ import random
 import numpy as np
 
 import torch
+import wandb
 from torch import nn
 from torch.nn import functional as F
 from torch import distributions as torchd
@@ -55,7 +56,9 @@ class TimeRecording:
 
 
 class Logger:
-    def __init__(self, logdir, step):
+    def __init__(self, logdir, step, wandb_project, wandb_run_name):
+        wandb.init(project=wandb_project, name=wandb_run_name, sync_tensorboard=True)
+
         self._logdir = logdir
         self._writer = SummaryWriter(log_dir=str(logdir), max_queue=1000)
         self._last_step = None
@@ -64,6 +67,13 @@ class Logger:
         self._images = {}
         self._videos = {}
         self.step = step
+        self.train_episode_returns = collections.deque(maxlen=100)
+        self.train_episode_lengths = collections.deque(maxlen=100)
+        self.train_episode_successes = collections.deque(maxlen=100)
+        self.eval_episode_returns = []
+        self.eval_episode_lengths = []
+        self.eval_episode_successes = []
+        self.eval_done = False
 
     def scalar(self, name, value):
         self._scalars[name] = float(value)
@@ -74,7 +84,7 @@ class Logger:
     def video(self, name, value):
         self._videos[name] = np.array(value)
 
-    def write(self, fps=False, step=False):
+    def write(self, fps=False, step=False, flush=False):
         if not step:
             step = self.step
         scalars = list(self._scalars.items())
@@ -98,10 +108,15 @@ class Logger:
             value = value.transpose(1, 4, 2, 0, 3).reshape((1, T, C, H, B * W))
             self._writer.add_video(name, value, step, 16)
 
-        self._writer.flush()
-        self._scalars = {}
-        self._images = {}
-        self._videos = {}
+        if flush:
+            if len(self.train_episode_returns) > 0:
+                self._writer.add_scalar('rollout/ep_rew_mean', np.mean(self.train_episode_returns), step)
+                self._writer.add_scalar('rollout/ep_len_mean', np.mean(self.train_episode_lengths), step)
+                self._writer.add_scalar('rollout/success_rate', np.mean(self.train_episode_successes), step)
+            self._writer.flush()
+            self._scalars = {}
+            self._images = {}
+            self._videos = {}
 
     def _compute_fps(self, step):
         if self._last_step is None:
@@ -177,7 +192,7 @@ def simulate(
         # step envs
         results = [e.step(a) for e, a in zip(envs, action)]
         results = [r() for r in results]
-        obs, reward, done = zip(*[p[:3] for p in results])
+        obs, reward, done, infos = zip(*[p[:4] for p in results])
         obs = list(obs)
         reward = list(reward)
         done = np.stack(done)
@@ -205,6 +220,7 @@ def simulate(
                 save_episodes(directory, {envs[i].id: cache[envs[i].id]})
                 length = len(cache[envs[i].id]["reward"]) - 1
                 score = float(np.array(cache[envs[i].id]["reward"]).sum())
+                is_success = int(infos[i].get('is_success', False))
                 video = cache[envs[i].id]["image"]
                 # record logs given from environments
                 for key in list(cache[envs[i].id].keys()):
@@ -216,31 +232,38 @@ def simulate(
                         cache[envs[i].id].pop(key)
 
                 if not is_eval:
+                    logger.train_episode_lengths.append(length)
+                    logger.train_episode_returns.append(score)
+                    logger.train_episode_successes.append(is_success)
                     step_in_dataset = erase_over_episodes(cache, limit)
-                    logger.scalar(f"dataset_size", step_in_dataset)
-                    logger.scalar(f"train_return", score)
-                    logger.scalar(f"train_length", length)
-                    logger.scalar(f"train_episodes", len(cache))
+                    logger.scalar(f"train/dataset_size", step_in_dataset)
+                    logger.scalar(f"train/return", score)
+                    logger.scalar(f"train/length", length)
+                    logger.scalar("train/is_success", is_success)
+
+                    logger.scalar(f"train/episodes", len(cache))
                     logger.write(step=logger.step)
                 else:
-                    if not "eval_lengths" in locals():
-                        eval_lengths = []
-                        eval_scores = []
-                        eval_done = False
-                    # start counting scores for evaluation
-                    eval_scores.append(score)
-                    eval_lengths.append(length)
+                    logger.eval_episode_returns.append(score)
+                    logger.eval_episode_lengths.append(length)
+                    logger.eval_episode_successes.append(is_success)
 
-                    score = sum(eval_scores) / len(eval_scores)
-                    length = sum(eval_lengths) / len(eval_lengths)
-                    logger.video(f"eval_policy", np.array(video)[None])
+                    if len(logger.eval_episode_returns) >= episodes:
+                        mean_reward = sum(logger.eval_episode_returns) / len(logger.eval_episode_returns)
+                        mean_ep_length = sum(logger.eval_episode_lengths) / len(logger.eval_episode_lengths)
+                        success_rate = sum(logger.eval_episode_successes) / len(logger.eval_episode_successes)
 
-                    if len(eval_scores) >= episodes and not eval_done:
-                        logger.scalar(f"eval_return", score)
-                        logger.scalar(f"eval_length", length)
-                        logger.scalar(f"eval_episodes", len(eval_scores))
-                        logger.write(step=logger.step)
-                        eval_done = True
+                        logger.scalar("eval/mean_reward", mean_reward)
+                        logger.scalar("eval/mean_ep_length", mean_ep_length)
+                        logger.scalar("eval/success_rate", success_rate)
+                        logger.scalar("eval/episodes", len(logger.eval_episode_returns))
+                        logger.video("eval/policy", np.array(video)[None])
+                        logger.write(step=logger.step, flush=True)
+
+                        logger.eval_episode_returns = []
+                        logger.eval_episode_lengths = []
+                        logger.eval_episode_successes = []
+
     if is_eval:
         # keep only last item for saving memory. this cache is used for video_pred later
         while len(cache) > 1:

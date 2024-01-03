@@ -2,6 +2,7 @@ import argparse
 import functools
 import os
 import pathlib
+import shutil
 import sys
 
 os.environ["MUJOCO_GL"] = "osmesa"
@@ -84,8 +85,8 @@ class Dreamer(nn.Module):
                     self._metrics[name] = []
                 if self._config.video_pred_log:
                     openl = self._wm.video_pred(next(self._dataset))
-                    self._logger.video("train_openl", to_np(openl))
-                self._logger.write(fps=True)
+                    self._logger.video("train/video_pred", to_np(openl))
+                self._logger.write(fps=True, flush=True)
 
         policy_output, state = self._policy(obs, state, training)
 
@@ -249,7 +250,7 @@ def main(config):
     config.evaldir.mkdir(parents=True, exist_ok=True)
     step = count_steps(config.traindir)
     # step in logger is environmental step
-    logger = tools.Logger(logdir, config.action_repeat * step)
+    logger = tools.Logger(logdir, config.action_repeat * step, config.wandb_project, config.wandb_run_name)
 
     print("Create envs.")
     if config.offline_traindir:
@@ -329,6 +330,8 @@ def main(config):
     while agent._step < config.steps + config.eval_every:
         logger.write()
         if config.eval_episode_num > 0:
+            shutil.rmtree(config.evaldir)
+            config.evaldir.mkdir(parents=True, exist_ok=True)
             print("Start evaluation.")
             eval_policy = functools.partial(agent, training=False)
             tools.simulate(
@@ -342,7 +345,8 @@ def main(config):
             )
             if config.video_pred_log:
                 video_pred = agent._wm.video_pred(next(eval_dataset))
-                logger.video("eval_openl", to_np(video_pred))
+                logger.video("eval/video_pred", to_np(video_pred))
+                logger.write(flush=True, step=logger.step)
         print("Start training.")
         state = tools.simulate(
             agent,
