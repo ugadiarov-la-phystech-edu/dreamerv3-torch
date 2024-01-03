@@ -1,5 +1,6 @@
 import random
 
+import cv2
 import gym
 import numpy as np
 import skimage
@@ -540,6 +541,69 @@ class AdHocNavigationAgent:
             direction = (0, int(delta[1] > 0) * 2 - 1)
 
         return idx * 4 + self.env.direction2action[direction]
+
+
+class Shapes2DEnv:
+    metadata = {}
+
+    def __init__(self, task, seed=0, size=(64, 64)):
+        assert task in ('Navigation5x5-v0', 'Navigation10x10-v0', 'PushingNoAgent5x5-v0')
+        self._env = gym.make(task)
+        self._env.seed(seed)
+        self._env.action_space.seed(seed)
+        self._size = size
+        self.reward_range = [-np.inf, np.inf]
+        orig_shape = self._env.observation_space.shape
+        self._need_resize = self._size[0] != orig_shape[0] or self._size[1] != orig_shape[1]
+
+    @property
+    def observation_space(self):
+        shape = self._size + (3,)
+        space = {
+            "image": gym.spaces.Box(
+                0, 255, shape, dtype=np.uint8
+            ),
+            "is_first": gym.spaces.Box(0, 1, (1,), dtype=np.uint8),
+            "is_last": gym.spaces.Box(0, 1, (1,), dtype=np.uint8),
+            "is_terminal": gym.spaces.Box(0, 1, (1,), dtype=np.uint8),
+        }
+        return gym.spaces.Dict(space)
+
+    @property
+    def action_space(self):
+        action_space = self._env.action_space
+        action_space.discrete = True
+        return action_space
+
+    def step(self, action):
+        image, reward, done, info = self._env.step(action)
+        reward = np.float32(reward)
+        obs = {
+            "image": self._resize(image),
+            "is_first": False,
+            "is_last": done,
+            "is_terminal":  info.get('is_success', False),
+        }
+        return obs, reward, done, info
+
+    def _resize(self, image):
+        if self._need_resize:
+            return cv2.resize(image, self._size, interpolation=cv2.INTER_AREA)
+
+        return image
+
+    def render(self):
+        return self._env.render()
+
+    def reset(self):
+        image = self._env.reset()
+        obs = {
+            "image": self._resize(image),
+            "is_first": True,
+            "is_last": False,
+            "is_terminal": False,
+        }
+        return obs
 
 
 if __name__ == "__main__":

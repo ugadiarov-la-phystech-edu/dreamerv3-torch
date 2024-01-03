@@ -222,6 +222,12 @@ def make_env(config, mode):
 
         env = minecraft.make_env(task, size=config.size, break_speed=config.break_speed)
         env = wrappers.OneHotAction(env)
+    elif suite == "shapes2d":
+        import envs.shapes2d
+        env = envs.shapes2d.Shapes2DEnv(task, size=config.size, seed=config.seed)
+        env = wrappers.OneHotAction(env)
+        max_episode_steps = env.env._env._max_episode_steps
+        assert max_episode_steps == config.time_limit, f"config.time_limit={config.time_limit}, but max_episode_steps={max_episode_steps}"
     else:
         raise NotImplementedError(suite)
     env = wrappers.TimeLimit(env, config.time_limit)
