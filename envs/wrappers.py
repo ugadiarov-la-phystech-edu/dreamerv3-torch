@@ -96,6 +96,15 @@ class RewardObs(gym.Wrapper):
         return obs
 
 
+class SlotObservation(gym.Wrapper):
+    def __init__(self, env, slot_shape):
+        super().__init__(env)
+        spaces = self.env.observation_space.spaces
+        del spaces["image"]
+        spaces["slots"] = gym.spaces.Box(-np.inf, np.inf, shape=slot_shape, dtype=np.float32)
+        self.observation_space = gym.spaces.Dict(spaces)
+
+
 class SelectAction(gym.Wrapper):
     def __init__(self, env, key):
         super().__init__(env)

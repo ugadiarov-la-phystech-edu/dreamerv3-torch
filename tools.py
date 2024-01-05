@@ -57,7 +57,8 @@ class TimeRecording:
 
 class Logger:
     def __init__(self, logdir, step, wandb_project, wandb_group, wandb_run_name):
-        wandb.init(project=wandb_project, group=wandb_group, name=wandb_run_name, sync_tensorboard=True)
+        if wandb_project is not None:
+            wandb.init(project=wandb_project, group=wandb_group, name=wandb_run_name, sync_tensorboard=True)
 
         self._logdir = logdir
         self._writer = SummaryWriter(log_dir=str(logdir), max_queue=1000)
@@ -151,6 +152,7 @@ def simulate(
     steps=0,
     episodes=0,
     state=None,
+    slot_extractor=None,
 ):
     # initialize or unpack simulation state
     if state is None:
@@ -169,6 +171,9 @@ def simulate(
             results = [envs[i].reset() for i in indices]
             results = [r() for r in results]
             for index, result in zip(indices, results):
+                if slot_extractor is not None:
+                    result["slots"] = slot_extractor(result.pop("image"), prev_slots=None, to_numpy=True)
+
                 t = result.copy()
                 t = {k: convert(v) for k, v in t.items()}
                 # action will be added to transition in add_to_cache
@@ -192,6 +197,12 @@ def simulate(
         # step envs
         results = [e.step(a) for e, a in zip(envs, action)]
         results = [r() for r in results]
+        if slot_extractor is not None:
+            images = np.stack([result[0].pop("image") for result in results])
+            slots = slot_extractor(images, prev_slots=obs["slots"], to_numpy=True)
+            for result, slot in zip(results, slots):
+                result[0]["slots"] = slot
+
         obs, reward, done, infos = zip(*[p[:4] for p in results])
         obs = list(obs)
         reward = list(reward)
@@ -221,7 +232,7 @@ def simulate(
                 length = len(cache[envs[i].id]["reward"]) - 1
                 score = float(np.array(cache[envs[i].id]["reward"]).sum())
                 is_success = int(infos[i].get('is_success', False))
-                video = cache[envs[i].id]["image"]
+                video = cache[envs[i].id].get("image", None)
                 # record logs given from environments
                 for key in list(cache[envs[i].id].keys()):
                     if "log_" in key:
@@ -257,7 +268,9 @@ def simulate(
                         logger.scalar("eval/mean_ep_length", mean_ep_length)
                         logger.scalar("eval/success_rate", success_rate)
                         logger.scalar("eval/episodes", len(logger.eval_episode_returns))
-                        logger.video("eval/policy", np.array(video)[None])
+                        if video is not None:
+                            logger.video("eval/policy", np.array(video)[None])
+
                         logger.write(step=logger.step, flush=True)
 
                         logger.eval_episode_returns = []
@@ -269,6 +282,7 @@ def simulate(
         while len(cache) > 1:
             # FIFO
             cache.popitem(last=False)
+
     return (step - steps, episode - episodes, done, length, obs, agent_state, reward)
 
 
@@ -549,6 +563,11 @@ class MSEDist:
         else:
             raise NotImplementedError(self._agg)
         return -loss
+
+    def reshape(self, *shape):
+        self._mode = self._mode.reshape(*shape)
+
+        return self
 
 
 class SymlogDist:

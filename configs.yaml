@@ -1,6 +1,6 @@
 defaults:
 
-  wandb_project: Test project
+  wandb_project: null
   wandb_run_name: run-0
   wandb_group: null
   logdir: null
@@ -71,6 +71,8 @@ defaults:
   unimix_ratio: 0.01
   action_unimix_ratio: 0.01
   initial: 'learned'
+  gnn_hidden_dim: 512
+  slate_checkpoint_path: null
 
   # Training
   batch_size: 16
@@ -178,6 +180,25 @@ atari100k:
   actions: needed
   time_limit: 108000
 
+atari100k-slots:
+  steps: 4e5
+  envs: 3
+  parallel: True
+  action_repeat: 4
+  train_ratio: 1024
+  video_pred_log: true
+  eval_episode_num: 100
+  actor_dist: 'onehot'
+  imag_gradient: 'reinforce'
+  stickey: False
+  lives: unused
+  noops: 30
+  resize: opencv
+  actions: needed
+  time_limit: 108000
+  encoder: {mlp_keys: '$^', cnn_keys: '$^', slot_keys: 'slots'}
+  decoder: {mlp_keys: '$^', cnn_keys: '$^', slot_keys: 'slots', mlp_layers: 2, mlp_units: 512, vector_dist: 'mse'}
+
 minecraft:
   task: minecraft_diamond
   step: 1e8
@@ -232,6 +253,24 @@ shapes2d:
   actor_layers: 5
   encoder: {mlp_keys: '$^', cnn_keys: 'image', cnn_depth: 96, mlp_layers: 5, mlp_units: 1024}
   decoder: {mlp_keys: '$^', cnn_keys: 'image', cnn_depth: 96, mlp_layers: 5, mlp_units: 1024}
+  actor_dist: 'onehot'
+  imag_gradient: 'reinforce'
+  time_limit: 100
+  eval_episode_num: 30
+  log_every: 3000
+  eval_every: 10000
+
+shapes2d-slots:
+  step: 30e6
+  action_repeat: 1
+  envs: 16
+  parallel: True
+  train_ratio: 512
+  video_pred_log: true
+  dyn_hidden: 1024
+  dyn_deter: 4096
+  encoder: {mlp_keys: '$^', cnn_keys: '$^', slot_keys: 'slots'}
+  decoder: {mlp_keys: '$^', cnn_keys: '$^', slot_keys: 'slots', mlp_layers: 2, mlp_units: 512, vector_dist: 'mse'}
   actor_dist: 'onehot'
   imag_gradient: 'reinforce'
   time_limit: 100
