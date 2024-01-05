@@ -266,7 +266,7 @@ shapes2d-slots:
   envs: 16
   parallel: True
   train_ratio: 512
-  video_pred_log: true
+  video_pred_log: false
   dyn_hidden: 1024
   dyn_deter: 4096
   encoder: {mlp_keys: '$^', cnn_keys: '$^', slot_keys: 'slots'}
