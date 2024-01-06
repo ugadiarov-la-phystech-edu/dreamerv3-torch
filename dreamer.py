@@ -172,13 +172,14 @@ def make_dataset(episodes, config):
     return dataset
 
 
-def make_env(config, mode):
+def make_env(config, mode, rank):
     suite, task = config.task.split("_", 1)
+    seed = config.seed + rank
     if suite == "dmc":
         import envs.dmc as dmc
 
         env = dmc.DeepMindControl(
-            task, config.action_repeat, config.size, seed=config.seed
+            task, config.action_repeat, config.size, seed=seed
         )
         env = wrappers.NormalizeActions(env)
     elif suite == "atari":
@@ -194,7 +195,7 @@ def make_env(config, mode):
             sticky=config.stickey,
             actions=config.actions,
             resize=config.resize,
-            seed=config.seed,
+            seed=seed,
         )
         env = wrappers.OneHotAction(env)
     elif suite == "dmlab":
@@ -204,27 +205,27 @@ def make_env(config, mode):
             task,
             mode if "train" in mode else "test",
             config.action_repeat,
-            seed=config.seed,
+            seed=seed,
         )
         env = wrappers.OneHotAction(env)
     elif suite == "memorymaze":
         from envs.memorymaze import MemoryMaze
 
-        env = MemoryMaze(task, seed=config.seed)
+        env = MemoryMaze(task, seed=seed)
         env = wrappers.OneHotAction(env)
     elif suite == "crafter":
         import envs.crafter as crafter
 
-        env = crafter.Crafter(task, config.size, seed=config.seed)
+        env = crafter.Crafter(task, config.size, seed=seed)
         env = wrappers.OneHotAction(env)
     elif suite == "minecraft":
         import envs.minecraft as minecraft
 
-        env = minecraft.make_env(task, size=config.size, break_speed=config.break_speed)
+        env = minecraft.make_env(task, size=size, break_speed=config.break_speed)
         env = wrappers.OneHotAction(env)
     elif suite == "shapes2d":
         import envs.shapes2d
-        env = envs.shapes2d.Shapes2DEnv(task, size=config.size, seed=config.seed)
+        env = envs.shapes2d.Shapes2DEnv(task, size=config.size, seed=seed)
         env = wrappers.OneHotAction(env)
         max_episode_steps = env.env._env._max_episode_steps
         assert max_episode_steps == config.time_limit, f"config.time_limit={config.time_limit}, but max_episode_steps={max_episode_steps}"
@@ -269,9 +270,9 @@ def main(config):
     else:
         directory = config.evaldir
     eval_eps = tools.load_episodes(directory, limit=1)
-    make = lambda mode: make_env(config, mode)
-    train_envs = [make("train") for _ in range(config.envs)]
-    eval_envs = [make("eval") for _ in range(config.envs)]
+    make = lambda mode, rank: make_env(config, mode, rank)
+    train_envs = [make("train", rank) for rank in range(config.envs)]
+    eval_envs = [make("eval", rank + config.envs) for rank in range(config.envs)]
     if config.parallel:
         train_envs = [Parallel(env, "process") for env in train_envs]
         eval_envs = [Parallel(env, "process") for env in eval_envs]
