@@ -134,8 +134,7 @@ class RSSM(nn.Module):
         elif self._initial == "learned":
             deter = torch.tanh(self.W).repeat(batch_size, num_objects, 1)
             state["deter"] = deter
-            stoch = self.get_stoch_objectwise(deter.view(batch_size * num_objects, -1))
-            state["stoch"] = stoch.view(batch_size, num_objects, *stoch.size()[1:])
+            state["stoch"] = self.get_stoch_objectwise(deter)
             return state
         else:
             raise NotImplementedError(self._initial)
@@ -219,12 +218,10 @@ class RSSM(nn.Module):
             else:
                 x = embed
             # (batch_size, num_objects, prior_deter + embed) -> (batch_size * num_objects, hidden)
-            x = self._obs_out_layers_objectwise(x.reshape(batch_size * num_objects, -1))
+            x = self._obs_out_layers_objectwise(x)
             # (batch_size * num_objects, hidden) -> (batch_size * num_objects, stoch, discrete_num)
             stats = self._suff_stats_layer_objectwise("obs", x)
             # (batch * num_objects, stoch, discrete_num) -> (batch, num_objects, stoch, discrete_num)
-            for key in stats:
-                stats[key] = stats[key].reshape(batch_size, num_objects, *stats[key].size()[1:])
             if sample:
                 stoch = self.get_dist(stats).sample()
             else:
@@ -254,12 +251,10 @@ class RSSM(nn.Module):
             deter = deter[0]  # Keras wraps the state in a list.
 
         # (batch, num_objects, deter) -> (batch * num_objects, hidden)
-        x = self._img_out_layers_objectwise(x.reshape(batch_size * num_objects, -1))
+        x = self._img_out_layers_objectwise(x)
         # (batch * num_objects, hidden) -> (batch * num_objects, stoch, discrete_num)
         stats = self._suff_stats_layer_objectwise("ims", x)
         # (batch * num_objects, stoch, discrete_num) -> (batch, num_objects, stoch, discrete_num)
-        for key in stats:
-            stats[key] = stats[key].reshape(batch_size, num_objects, *stats[key].size()[1:])
         if sample:
             stoch = self.get_dist(stats).sample()
         else:
@@ -497,10 +492,8 @@ class MultiDecoder(nn.Module):
             dists.update(self._mlp(features))
 
         if self.slot_shapes:
-            dims = features.size()[:-1]
-            features = features.reshape(math.prod(dims), -1)
             key, = self.slot_shapes.keys()
-            dists[key] = self._mlp_slots(features).reshape(*dims, -1)
+            dists[key] = self._mlp_slots(features)
 
         return dists
 
