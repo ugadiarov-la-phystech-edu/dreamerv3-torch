@@ -58,7 +58,10 @@ class TimeRecording:
 class Logger:
     def __init__(self, logdir, step, wandb_project, wandb_group, wandb_run_name):
         if wandb_project is not None:
-            wandb.init(project=wandb_project, group=wandb_group, name=wandb_run_name, sync_tensorboard=True)
+            wandb_dir = f'./wandb/{wandb_project}/{wandb_group}'
+            os.makedirs(wandb_dir, exist_ok=True)
+            wandb.init(project=wandb_project, group=wandb_group, name=wandb_run_name, sync_tensorboard=True,
+                       dir=wandb_dir)
 
         self._logdir = logdir
         self._writer = SummaryWriter(log_dir=str(logdir), max_queue=1000)
