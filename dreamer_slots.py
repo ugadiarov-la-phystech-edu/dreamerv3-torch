@@ -247,9 +247,7 @@ def make_env(config, mode, rank, slot_shape=None):
     return env
 
 
-def load_slot_extractor(checkpoint_path):
-    ocr_config_path = 'ocr/slate/config/navigation5x5.yaml'
-    env_config_path = 'envs/config/navigation5x5.yaml'
+def load_slot_extractor(ocr_config_path, env_config_path, checkpoint_path):
     config_ocr = OmegaConf.load(ocr_config_path)
     config_env = OmegaConf.load(env_config_path)
     slate = SLATE(config_ocr, config_env, observation_space=None, preserve_slot_order=True)
@@ -300,7 +298,8 @@ def main(config):
         directory = config.evaldir
     eval_eps = tools.load_episodes(directory, limit=1)
 
-    slot_extractor, slot_shape = load_slot_extractor(config.slate_checkpoint_path)
+    slot_extractor, slot_shape = load_slot_extractor(config.ocr_config_path, config.env_config_path,
+                                                     config.slate_checkpoint_path)
     make = lambda mode, rank: make_env(config, mode, rank, slot_shape)
     train_envs = [make("train", rank) for rank in range(config.envs)]
     eval_envs = [make("eval", rank + config.envs) for rank in range(config.envs)]
