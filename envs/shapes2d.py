@@ -588,7 +588,7 @@ class Shapes2DEnv:
 
     def _resize(self, image):
         if self._need_resize:
-            return cv2.resize(image, self._size, interpolation=cv2.INTER_AREA)
+            return cv2.resize(image, self._size, interpolation=cv2.INTER_CUBIC)
 
         return image
 
