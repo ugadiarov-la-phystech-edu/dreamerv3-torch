@@ -73,7 +73,7 @@ defaults:
   initial: 'learned'
   gnn_hidden_dim: 512
   # slate_checkpoint_path: navigation5x5/model_best.pth
-  slate_checkpoint_path: null
+  ocr_checkpoint_path: null
   # ocr_config_path: ocr/slate/config/navigation5x5.yaml
   ocr_config_path: null
   # env_config_path: envs/config/navigation5x5.yaml
