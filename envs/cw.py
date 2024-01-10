@@ -1,3 +1,4 @@
+import gym
 import numpy as np
 
 from envs.cw_envs import CwTargetEnv
@@ -13,7 +14,13 @@ class CwEnv:
 
     @property
     def observation_space(self):
-        return self._env.observation_space
+        space = {
+            "image": self._env.observation_space,
+            "is_first": gym.spaces.Box(0, 1, (1,), dtype=np.uint8),
+            "is_last": gym.spaces.Box(0, 1, (1,), dtype=np.uint8),
+            "is_terminal": gym.spaces.Box(0, 1, (1,), dtype=np.uint8),
+        }
+        return gym.spaces.Dict(space)
 
     @property
     def action_space(self):
