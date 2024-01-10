@@ -309,7 +309,7 @@ def main(config):
     eval_eps = tools.load_episodes(directory, limit=1)
 
     slot_extractor, slot_shape = load_slot_extractor(config.ocr_config_path, config.env_config_path,
-                                                     config.slate_checkpoint_path)
+                                                     config.ocr_checkpoint_path)
     make = lambda mode, rank: make_env(config, mode, rank, slot_shape)
     train_envs = [make("train", rank) for rank in range(config.envs)]
     eval_envs = [make("eval", rank + config.envs) for rank in range(config.envs)]
