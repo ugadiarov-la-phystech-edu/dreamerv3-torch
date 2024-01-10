@@ -229,6 +229,16 @@ def make_env(config, mode, rank):
         env = wrappers.OneHotAction(env)
         max_episode_steps = env.env._env._max_episode_steps
         assert max_episode_steps == config.time_limit, f"config.time_limit={config.time_limit}, but max_episode_steps={max_episode_steps}"
+    elif suite == "cw":
+        import envs.cw as cw
+        import omegaconf
+
+        env_config = omegaconf.OmegaConf.load(config.env_config_path)
+        env = cw.CwEnv(env_config, seed)
+        max_episode_length = env._env.unwrapped._max_episode_length
+        assert max_episode_length == config.time_limit, f"config.time_limit={config.time_limit}, but max_episode_length={max_episode_length}"
+
+        env = wrappers.NormalizeActions(env)
     else:
         raise NotImplementedError(suite)
     env = wrappers.TimeLimit(env, config.time_limit)
