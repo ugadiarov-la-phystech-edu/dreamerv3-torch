@@ -3,6 +3,8 @@ defaults:
   wandb_project: null
   wandb_run_name: run-0
   wandb_group: null
+  wandb_run_id: null
+  wandb_resume: False
   logdir: null
   traindir: null
   evaldir: null
