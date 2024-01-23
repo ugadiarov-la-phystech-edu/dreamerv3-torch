@@ -547,7 +547,7 @@ class Shapes2DEnv:
     metadata = {}
 
     def __init__(self, task, seed=0, size=(64, 64)):
-        assert task in ('Navigation5x5-v0', 'Navigation10x10-v0', 'PushingNoAgent5x5-v0')
+        assert task in ('Navigation5x5-v0', 'Navigation10x10-v0', 'PushingNoAgent5x5-v0', 'Pushing7x7-v0')
         self._env = gym.make(task)
         self._env.seed(seed)
         self._env.action_space.seed(seed)
