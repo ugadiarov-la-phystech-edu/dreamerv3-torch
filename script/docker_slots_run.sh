@@ -18,5 +18,6 @@ curl -o model_best.pth -L https://api.wandb.ai/files/ulaelfray/navigation7x7_sla
           --batch_length 36 \
           --wandb_project dreamerv3-torch_pushing7x7 \
           --wandb_run_name run-"$SEED" \
+          --wandb_group slots \
           --seed "$SEED" \
           --logdir ./logdir/slots_"$SEED"
