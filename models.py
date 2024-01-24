@@ -103,9 +103,14 @@ class WorldModel(nn.Module):
         )
         for name in config.grad_heads:
             assert name in self.heads, name
+
+        parameters = list(self.named_parameters())
+        parameters = [(k, v) for k, v in parameters if not self.encoder._is_frozen or 'encoder' not in k]
+        parameters = [(k, v) for k, v in parameters if not self.heads['decoder']._is_frozen or 'decoder' not in k]
+        parameters = [v for k, v in parameters]
         self._model_opt = tools.Optimizer(
             "model",
-            self.parameters(),
+            parameters,
             config.model_lr,
             config.opt_eps,
             config.grad_clip,

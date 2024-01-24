@@ -1,4 +1,6 @@
 import argparse
+import collections
+import copy
 import functools
 import os
 import pathlib
@@ -24,6 +26,10 @@ from torch import distributions as torchd
 
 
 to_np = lambda x: x.detach().cpu().numpy()
+
+
+def filter_by_prefix(ordered_dict, prefix):
+    return collections.OrderedDict((k[len(prefix):], v) for k, v in ordered_dict.items() if k.startswith(prefix))
 
 
 class Dreamer(nn.Module):
@@ -337,7 +343,16 @@ def main(config):
         train_dataset,
     ).to(config.device)
     agent.requires_grad_(requires_grad=False)
-    if (logdir / "latest.pt").exists():
+    if config.pretrained_checkpoint_path is not None:
+        agent_state_dict = torch.load(config.pretrained_checkpoint_path)['agent_state_dict']
+        encoder_state_dict = filter_by_prefix(agent_state_dict, '_wm._orig_mod.encoder.')
+        decoder_state_dict = filter_by_prefix(agent_state_dict, '_wm._orig_mod.heads.decoder.')
+        for module in (agent._wm, agent._task_behavior._world_model, agent._expl_behavior._world_model):
+            module.encoder.load_state_dict(copy.deepcopy(encoder_state_dict))
+            module.heads['decoder'].load_state_dict(copy.deepcopy(decoder_state_dict))
+
+        del agent_state_dict, encoder_state_dict, decoder_state_dict
+    elif (logdir / "latest.pt").exists():
         checkpoint = torch.load(logdir / "latest.pt")
         agent.load_state_dict(checkpoint["agent_state_dict"])
         tools.recursively_load_optim_state_dict(agent, checkpoint["optims_state_dict"])

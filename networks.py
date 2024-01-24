@@ -6,6 +6,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 from torch import distributions as torchd
+from torch.nn.modules.module import T
 
 import tools
 
@@ -344,6 +345,7 @@ class MultiEncoder(nn.Module):
         mlp_layers,
         mlp_units,
         symlog_inputs,
+        is_frozen,
     ):
         super(MultiEncoder, self).__init__()
         excluded = ("is_first", "is_last", "is_terminal", "reward")
@@ -384,6 +386,14 @@ class MultiEncoder(nn.Module):
             )
             self.outdim += mlp_units
 
+        self._is_frozen = is_frozen
+        if self._is_frozen:
+            super().requires_grad_(False)
+
+    def requires_grad_(self: T, requires_grad: bool = True) -> T:
+        if not self._is_frozen:
+            super().requires_grad_(requires_grad)
+
     def forward(self, obs):
         outputs = []
         if self.cnn_shapes:
@@ -413,6 +423,7 @@ class MultiDecoder(nn.Module):
         cnn_sigmoid,
         image_dist,
         vector_dist,
+        is_frozen,
     ):
         super(MultiDecoder, self).__init__()
         excluded = ("is_first", "is_last", "is_terminal")
@@ -452,6 +463,14 @@ class MultiDecoder(nn.Module):
                 vector_dist,
             )
         self._image_dist = image_dist
+
+        self._is_frozen = is_frozen
+        if self._is_frozen:
+            super().requires_grad_(False)
+
+    def requires_grad_(self: T, requires_grad: bool = True) -> T:
+        if not self._is_frozen:
+            super().requires_grad_(requires_grad)
 
     def forward(self, features):
         dists = {}
