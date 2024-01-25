@@ -14,6 +14,10 @@ import ruamel.yaml as yaml
 
 sys.path.append(str(pathlib.Path(__file__).parent))
 
+from torch import distributions as torchd
+
+torchd.independent.Independent.mode = property(lambda self: self.base_dist.mode)
+
 import exploration as expl
 import models
 import tools
@@ -22,7 +26,6 @@ from parallel import Parallel, Damy
 
 import torch
 from torch import nn
-from torch import distributions as torchd
 
 
 to_np = lambda x: x.detach().cpu().numpy()
