@@ -124,3 +124,51 @@ class UUID(gym.Wrapper):
         timestamp = datetime.datetime.now().strftime("%Y%m%dT%H%M%S")
         self.id = f"{timestamp}-{str(uuid.uuid4().hex)}"
         return self.env.reset()
+
+
+class SlotsWrapper:
+    def __init__(self, envs, slot_extractor, slots_shape):
+        self._envs = envs
+        self._slot_extractor = slot_extractor
+        self._slots_shape = slots_shape
+        self._prev_slots = np.zeros((len(self._envs), *slots_shape), dtype=np.float32)
+
+    def __len__(self):
+        return len(self._envs)
+
+    def get_env_id(self, index):
+        return self._envs[index].id
+
+    def reset(self, indices):
+        results = [self._envs[i].reset() for i in indices]
+        results = [r() for r in results]
+        images = np.stack([result.pop("image") for result in results])
+        slots = self._slot_extractor(images, prev_slots=None, to_numpy=True)
+        self._prev_slots[indices] = slots
+
+        for i, result in enumerate(results):
+            result["slots"] = slots[i]
+
+        return results
+
+    def step(self, action):
+        assert len(action) == len(self)
+        results = [e.step(a) for e, a in zip(self._envs, action)]
+        results = [r() for r in results]
+        images = np.stack([result[0].pop("image") for result in results])
+        slots = self._slot_extractor(images, prev_slots=self._prev_slots, to_numpy=True)
+        self._prev_slots[:] = slots
+        for result, slot in zip(results, slots):
+            result[0]["slots"] = slot
+
+        return results
+
+    def get_action_space(self):
+        return self._envs[0].action_space
+
+    def get_observation_space(self):
+        return self._envs[0].observation_space
+
+    def close(self):
+        for env in self._envs:
+            env.close()

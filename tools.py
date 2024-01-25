@@ -17,6 +17,7 @@ from torch.nn import functional as F
 from torch import distributions as torchd
 from torch.utils.tensorboard import SummaryWriter
 
+from envs.wrappers import SlotsWrapper
 
 to_np = lambda x: x.detach().cpu().numpy()
 
@@ -156,7 +157,7 @@ class Logger:
 
 def simulate(
     agent,
-    envs,
+    envs: SlotsWrapper,
     cache,
     directory,
     logger,
@@ -181,19 +182,14 @@ def simulate(
         # reset envs if necessary
         if done.any():
             indices = [index for index, d in enumerate(done) if d]
-            results = [envs[i].reset() for i in indices]
-            results = [r() for r in results]
-            for index, result in zip(indices, results):
-                if slot_extractor is not None:
-                    result["slots"] = slot_extractor(result.pop("image"), prev_slots=None, to_numpy=True)
-
+            for index, result in zip(indices, envs.reset(indices)):
                 t = result.copy()
                 t = {k: convert(v) for k, v in t.items()}
                 # action will be added to transition in add_to_cache
                 t["reward"] = 0.0
                 t["discount"] = 1.0
                 # initial state should be added to cache
-                add_to_cache(cache, envs[index].id, t)
+                add_to_cache(cache, envs.get_env_id(index), t)
                 # replace obs with done by initial state
                 obs[index] = result
         # step agents
@@ -206,16 +202,8 @@ def simulate(
             ]
         else:
             action = np.array(action)
-        assert len(action) == len(envs)
         # step envs
-        results = [e.step(a) for e, a in zip(envs, action)]
-        results = [r() for r in results]
-        if slot_extractor is not None:
-            images = np.stack([result[0].pop("image") for result in results])
-            slots = slot_extractor(images, prev_slots=obs["slots"], to_numpy=True)
-            for result, slot in zip(results, slots):
-                result[0]["slots"] = slot
-
+        results = envs.step(action)
         obs, reward, done, infos = zip(*[p[:4] for p in results])
         obs = list(obs)
         reward = list(reward)
@@ -225,7 +213,7 @@ def simulate(
         step += len(envs)
         length *= 1 - done
         # add to cache
-        for a, result, env in zip(action, results, envs):
+        for index, (a, result) in enumerate(zip(action, results)):
             o, r, d, info = result
             o = {k: convert(v) for k, v in o.items()}
             transition = o.copy()
@@ -235,25 +223,25 @@ def simulate(
                 transition["action"] = a
             transition["reward"] = r
             transition["discount"] = info.get("discount", np.array(1 - float(d)))
-            add_to_cache(cache, env.id, transition)
+            add_to_cache(cache, envs.get_env_id(index), transition)
 
         if done.any():
             indices = [index for index, d in enumerate(done) if d]
             # logging for done episode
             for i in indices:
-                save_episodes(directory, {envs[i].id: cache[envs[i].id]})
-                length = len(cache[envs[i].id]["reward"]) - 1
-                score = float(np.array(cache[envs[i].id]["reward"]).sum())
+                save_episodes(directory, {envs.get_env_id(i): cache[envs.get_env_id(i)]})
+                length = len(cache[envs.get_env_id(i)]["reward"]) - 1
+                score = float(np.array(cache[envs.get_env_id(i)]["reward"]).sum())
                 is_success = int(infos[i].get('is_success', False))
-                video = cache[envs[i].id].get("image", None)
+                video = cache[envs.get_env_id(i)].get("image", None)
                 # record logs given from environments
-                for key in list(cache[envs[i].id].keys()):
+                for key in list(cache[envs.get_env_id(i)].keys()):
                     if "log_" in key:
                         logger.scalar(
-                            key, float(np.array(cache[envs[i].id][key]).sum())
+                            key, float(np.array(cache[envs.get_env_id(i)][key]).sum())
                         )
                         # log items won't be used later
-                        cache[envs[i].id].pop(key)
+                        cache[envs.get_env_id(i)].pop(key)
 
                 if not is_eval:
                     logger.train_episode_lengths.append(length)
