@@ -7,6 +7,12 @@ import pathlib
 import shutil
 import sys
 
+import gym
+from omegaconf import OmegaConf
+
+from ocr.slate.slate import SLATE
+from ocr.tools import SlotExtractor
+
 os.environ["MUJOCO_GL"] = "osmesa"
 
 import numpy as np
@@ -103,8 +109,8 @@ class Dreamer(nn.Module):
 
     def _policy(self, obs, state, training):
         if state is None:
-            batch_size = len(obs["image"])
-            latent = self._wm.dynamics.initial(len(obs["image"]))
+            batch_size = len(obs["vector"])
+            latent = self._wm.dynamics.initial(len(obs["vector"]))
             action = torch.zeros((batch_size, self._config.num_actions)).to(
                 self._config.device
             )
@@ -227,7 +233,7 @@ def make_env(config, mode, rank):
     elif suite == "minecraft":
         import envs.minecraft as minecraft
 
-        env = minecraft.make_env(task, size=size, break_speed=config.break_speed)
+        env = minecraft.make_env(task, size=config.size, break_speed=config.break_speed)
         env = wrappers.OneHotAction(env)
     elif suite == "shapes2d":
         import envs.shapes2d
@@ -253,6 +259,25 @@ def make_env(config, mode, rank):
     if suite == "minecraft":
         env = wrappers.RewardObs(env)
     return env
+
+
+def load_slot_extractor(ocr_config_path, env_config_path, checkpoint_path):
+    config_ocr = OmegaConf.load(ocr_config_path)
+    config_env = OmegaConf.load(env_config_path)
+    slate = SLATE(config_ocr, config_env, observation_space=None, preserve_slot_order=True)
+    slate = slate.cuda()
+
+    state_dict = torch.load(checkpoint_path)["ocr_module_state_dict"]
+    slate._module.load_state_dict(state_dict)
+    slate.eval()
+
+    for param in slate.parameters():
+        param.requires_grad = False
+
+    slot_extractor = SlotExtractor(slate, device='cuda')
+    slot_dim = (config_ocr.slotattr.num_slots, config_ocr.slotattr.slot_size)
+
+    return slot_extractor, slot_dim
 
 
 def main(config):
@@ -286,6 +311,9 @@ def main(config):
     else:
         directory = config.evaldir
     eval_eps = tools.load_episodes(directory, limit=1)
+
+    slot_extractor, slot_shape = load_slot_extractor(config.ocr_config_path, config.env_config_path,
+                                                     config.ocr_checkpoint_path)
     make = lambda mode, rank: make_env(config, mode, rank)
     train_envs = [make("train", rank) for rank in range(config.envs)]
     eval_envs = [make("eval", rank + config.envs) for rank in range(config.envs)]
@@ -295,7 +323,9 @@ def main(config):
     else:
         train_envs = [Damy(env) for env in train_envs]
         eval_envs = [Damy(env) for env in eval_envs]
-    acts = train_envs[0].action_space
+    train_envs = wrappers.SlotsWrapper(train_envs, slot_extractor, slot_shape)
+    eval_envs = wrappers.SlotsWrapper(eval_envs, slot_extractor, slot_shape)
+    acts = train_envs.get_action_space()
     config.num_actions = acts.n if hasattr(acts, "n") else acts.shape[0]
 
     state = None
@@ -335,9 +365,12 @@ def main(config):
     print("Simulate agent.")
     train_dataset = make_dataset(train_eps, config)
     eval_dataset = make_dataset(eval_eps, config)
+    obs_space = train_envs.get_observation_space()
+    obs_space.spaces.pop('image')
+    obs_space.spaces["vector"] = gym.spaces.Box(-np.inf, np.inf, (np.prod(slot_shape),), dtype=np.float32)
     agent = Dreamer(
-        train_envs[0].observation_space,
-        train_envs[0].action_space,
+        obs_space,
+        train_envs.get_action_space(),
         config,
         logger,
         train_dataset,
@@ -395,9 +428,10 @@ def main(config):
             "optims_state_dict": tools.recursively_collect_optim_state_dict(agent),
         }
         torch.save(items_to_save, logdir / "latest.pt")
-    for env in train_envs + eval_envs:
+
+    for envs in (train_envs, eval_envs):
         try:
-            env.close()
+            envs.close()
         except Exception:
             pass
 

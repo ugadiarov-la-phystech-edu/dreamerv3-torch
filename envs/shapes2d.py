@@ -180,21 +180,21 @@ class Shapes2d(gym.Env):
         if self.observation_type == 'squares':
             image = self.render_squares()
         elif self.observation_type == 'shapes':
-            image = self.render_shapes()
+            image, masks = self.render_shapes()
         else:
             assert False, f'Invalid observation type: {self.observation_type}.'
 
         if self.return_state:
-            return np.array(self.state), image
+            return np.array(self.state), image, masks
 
-        return image
+        return image, masks
 
     def render(self, mode=None):
         observation = self._get_observation()
         if self.return_state:
             return observation[1]
 
-        return observation
+        return observation[0]
 
     def reset(self):
         state = np.full(shape=[self.w, self.w], fill_value=-1, dtype=np.int32)
@@ -469,8 +469,9 @@ class Shapes2d(gym.Env):
         return im.astype(dtype=np.uint8)
 
     def render_shapes(self):
-        im = np.zeros((self.w * self.render_scale, self.w * self.render_scale, self._get_image_channels()),
+        im = np.zeros((self.w * self.render_scale, self.w * self.render_scale, 3),
                       dtype=np.float32)
+        masks = np.zeros((self.n_boxes, self.w * self.render_scale, self.w * self.render_scale), dtype=np.uint8)
         for idx, pos in enumerate(self.box_pos):
             if pos[0] == -1:
                 assert pos[1] == -1
@@ -501,16 +502,14 @@ class Shapes2d(gym.Env):
                 rr, cc = scalene_triangle(
                     pos[0] * self.render_scale, pos[1] * self.render_scale, self.render_scale, im.shape)
 
-            if self.channel_wise:
-                im[rr, cc, idx] = 1
-            else:
-                im[rr, cc, :] = self.colors[idx][:3]
+            im[rr, cc, :] = self.colors[idx][:3]
+            masks[idx, rr, cc] = 255
 
         if self.channels_first:
             im = im.transpose([2, 0, 1])
 
         im *= 255
-        return im.astype(np.uint8)
+        return im.astype(np.uint8), masks
 
 
 class AdHocNavigationAgent:
@@ -576,13 +575,14 @@ class Shapes2DEnv:
         return action_space
 
     def step(self, action):
-        image, reward, done, info = self._env.step(action)
+        (image, masks), reward, done, info = self._env.step(action)
         reward = np.float32(reward)
         obs = {
             "image": self._resize(image),
             "is_first": False,
             "is_last": done,
             "is_terminal":  info.get('is_success', False),
+            "masks": [self._resize(mask) > 0 for mask in masks]
         }
         return obs, reward, done, info
 
@@ -596,12 +596,13 @@ class Shapes2DEnv:
         return self._env.render()
 
     def reset(self):
-        image = self._env.reset()
+        image, masks = self._env.reset()
         obs = {
             "image": self._resize(image),
             "is_first": True,
             "is_last": False,
             "is_terminal": False,
+            "masks": [self._resize(mask) > 0 for mask in masks]
         }
         return obs
 

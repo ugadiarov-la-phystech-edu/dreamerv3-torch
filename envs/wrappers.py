@@ -139,15 +139,51 @@ class SlotsWrapper:
     def get_env_id(self, index):
         return self._envs[index].id
 
+    @staticmethod
+    def match(masks, masks_predict):
+        not_matched_masks = set(range(masks_predict.shape[0]))
+        not_matched_masks_predict = set(range(masks_predict.shape[0]))
+        matching = [None] * masks_predict.shape[0]
+        for i in range(len(masks)):
+            mask = masks[i]
+            area = mask.sum()
+            if area == 0:
+                continue
+
+            best_match_index = None
+            best_match_score = 0
+            for j in not_matched_masks_predict:
+                score = masks_predict[j][mask].sum() / area
+                if score > best_match_score:
+                    best_match_index = j
+                    best_match_score = score
+
+            matching[i] = best_match_index
+            not_matched_masks.remove(i)
+            not_matched_masks_predict.remove(best_match_index)
+
+        for i, j in zip(not_matched_masks, not_matched_masks_predict):
+            matching[i] = j
+
+        return matching
+
     def reset(self, indices):
         results = [self._envs[i].reset() for i in indices]
         results = [r() for r in results]
         images = np.stack([result.pop("image") for result in results])
-        slots = self._slot_extractor(images, prev_slots=None, to_numpy=True)
+        batch_masks = [result.pop("masks") for result in results]
+        slots, batch_masks_predict = self._slot_extractor(images, prev_slots=None, to_numpy=True)
+
+        matching = []
+        for masks, masks_predict in zip(batch_masks, batch_masks_predict):
+            matching.append(self.match(masks, masks_predict))
+
+        matching = np.asarray(matching)
+        slots = np.take_along_axis(slots, matching[..., np.newaxis], axis=1)
         self._prev_slots[indices] = slots
 
         for i, result in enumerate(results):
-            result["slots"] = slots[i]
+            result["vector"] = slots[i].reshape(-1)
 
         return results
 
@@ -156,10 +192,19 @@ class SlotsWrapper:
         results = [e.step(a) for e, a in zip(self._envs, action)]
         results = [r() for r in results]
         images = np.stack([result[0].pop("image") for result in results])
-        slots = self._slot_extractor(images, prev_slots=self._prev_slots, to_numpy=True)
+        batch_masks = [result[0].pop("masks") for result in results]
+        slots, batch_masks_predict = self._slot_extractor(images, prev_slots=self._prev_slots, to_numpy=True)
+
+        matching = []
+        for masks, masks_predict in zip(batch_masks, batch_masks_predict):
+            matching.append(self.match(masks, masks_predict))
+
+        matching = np.asarray(matching)
+        slots = np.take_along_axis(slots, matching[..., np.newaxis], axis=1)
+
         self._prev_slots[:] = slots
         for result, slot in zip(results, slots):
-            result[0]["slots"] = slot
+            result[0]["vector"] = slot.reshape(-1)
 
         return results
 

@@ -314,11 +314,14 @@ class SlotExtractor:
         if batch_prev_slots is not None:
             batch_prev_slots = obs_to_tensor(batch_prev_slots, self._device)
 
-        slots = self._model(batch_images, prev_slots=batch_prev_slots).detach()
+        slots, masks = self._model(batch_images, prev_slots=batch_prev_slots, with_masks=True)
+        masks = masks.squeeze(2)
         if len(images.shape) == 3:
             slots = slots[0]
+            masks = masks[0]
 
         if to_numpy:
             slots = slots.cpu().numpy()
+            masks = masks.cpu().numpy()
 
-        return slots
+        return slots, masks

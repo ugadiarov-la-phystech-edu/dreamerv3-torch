@@ -40,7 +40,7 @@ class SLATE(Base):
 
     def __call__(self, obs: Tensor, with_attns=False, with_masks=False, prev_slots=None) -> Tensor:
         if self.preserve_slot_order and prev_slots is None:
-            prev_slots = self._module(obs, with_attns, with_masks, prev_slots=None)
+            prev_slots = self._module(obs, with_attns=False, with_masks=False, prev_slots=None)
         return self._module(obs, with_attns, with_masks, prev_slots=prev_slots)
 
     def get_loss(self, obs: Tensor, masks, with_rep=False, with_mse=False, prev_slots=None) -> dict:

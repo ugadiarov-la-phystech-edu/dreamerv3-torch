@@ -339,6 +339,7 @@ class MultiEncoder(nn.Module):
         mlp_layers,
         mlp_units,
         symlog_inputs,
+        is_frozen,
     ):
         super(MultiEncoder, self).__init__()
         excluded = ("is_first", "is_last", "is_terminal", "reward")
@@ -422,6 +423,7 @@ class MultiDecoder(nn.Module):
         cnn_sigmoid,
         image_dist,
         vector_dist,
+        is_frozen,
     ):
         super(MultiDecoder, self).__init__()
         excluded = ("is_first", "is_last", "is_terminal")
