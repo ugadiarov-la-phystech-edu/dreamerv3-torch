@@ -2,7 +2,8 @@
 
 SEED=$1
 curl -o model_best_new.pth -L https://api.wandb.ai/files/ulaelfray/navigation5x5_slate/7361kt0t/checkpoints/model_best.pth && \
-  python dreamer.py --video_pred_log False\
+  python dreamer.py \
+    --video_pred_log False \
     --configs shapes2d \
     --task shapes2d_Navigation5x5-v0 \
     --size "64,64" \
