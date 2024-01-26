@@ -474,10 +474,17 @@ class SampleDist:
 
 class OneHotDist(torchd.one_hot_categorical.OneHotCategorical):
     def __init__(self, logits=None, probs=None, unimix_ratio=0.0):
+        self._orig_logits = logits
+        self._orig_probs = None
+        self._logits = None
+        self._probs = None
         if logits is not None and unimix_ratio > 0.0:
             probs = F.softmax(logits, dim=-1)
+            self._orig_probs = probs
             probs = probs * (1.0 - unimix_ratio) + unimix_ratio / probs.shape[-1]
             logits = torch.log(probs)
+            self._probs = probs
+            self._logits = logits
             super().__init__(logits=logits, probs=None)
         else:
             super().__init__(logits=logits, probs=probs)
@@ -489,14 +496,28 @@ class OneHotDist(torchd.one_hot_categorical.OneHotCategorical):
         return _mode.detach() + super().logits - super().logits.detach()
 
     def sample(self, sample_shape=(), seed=None):
-        if seed is not None:
-            raise ValueError("need to check")
-        sample = super().sample(sample_shape)
-        probs = super().probs
-        while len(probs.shape) < len(sample.shape):
-            probs = probs[None]
-        sample += probs - probs.detach()
-        return sample
+        try:
+            if seed is not None:
+                raise ValueError("need to check")
+            sample = super().sample(sample_shape)
+            probs = super().probs
+            while len(probs.shape) < len(sample.shape):
+                probs = probs[None]
+            sample += probs - probs.detach()
+            return sample
+        except Exception as e:
+            print('orig_logits:')
+            print(self._orig_logits)
+            print()
+            print('orig_probs:')
+            print(self._orig_probs)
+            print()
+            print('logits:')
+            print(self._logits)
+            print()
+            print('probs:')
+            print(self._probs)
+            raise e
 
 
 class DiscDist:
