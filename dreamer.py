@@ -345,6 +345,7 @@ def main(config):
     agent.requires_grad_(requires_grad=False)
     if config.pretrained_checkpoint_path is not None:
         agent_state_dict = torch.load(config.pretrained_checkpoint_path)['agent_state_dict']
+        assert not any([torch.isnan(v).any().item() for k, v in agent_state_dict.items()]), f'There are NaNs in the checkpoint!'
         encoder_state_dict = filter_by_prefix(agent_state_dict, '_wm._orig_mod.encoder.')
         decoder_state_dict = filter_by_prefix(agent_state_dict, '_wm._orig_mod.heads.decoder.')
         for module in (agent._wm, agent._task_behavior._world_model, agent._expl_behavior._world_model):

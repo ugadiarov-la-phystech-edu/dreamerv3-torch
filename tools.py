@@ -30,14 +30,31 @@ def symexp(x):
 
 
 class RequiresGrad:
-    def __init__(self, model):
+    def __init__(self, model, exclude_substrings=('encoder', 'decoder')):
         self._model = model
+        self._exclude_substrings = exclude_substrings
 
     def __enter__(self):
-        self._model.requires_grad_(requires_grad=True)
+        for name, parameter in self._model.named_parameters():
+            skip = False
+            for substring in self._exclude_substrings:
+                if substring in name:
+                    skip = True
+                    break
+
+            if not skip:
+                parameter.requires_grad = True
 
     def __exit__(self, *args):
-        self._model.requires_grad_(requires_grad=False)
+        for name, parameter in self._model.named_parameters():
+            skip = False
+            for substring in self._exclude_substrings:
+                if substring in name:
+                    skip = True
+                    break
+
+            if not skip:
+                parameter.requires_grad = False
 
 
 class TimeRecording:
